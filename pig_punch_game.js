@@ -18,7 +18,11 @@ const pig = {
     isJumping: false,
     jumpVelocity: 0,
     jumpPower: -22,
-    gravity: 0.6
+    gravity: 0.6,
+    health: 3,
+    maxHealth: 3,
+    invulnerable: false,
+    invulnerabilityTimer: 0
 };
 
 let keyPressed = false;
@@ -32,8 +36,14 @@ let highScore = parseInt(localStorage.getItem('pigPunchHighScore')) || 0;
 let newRecord = false;
 let celebrationTimer = 0;
 
+// Time system
+let timeOfDay = 'day'; // 'day', 'evening', 'night'
+let timeTransitionLevel = 5; // Time changes every 5 levels
+
 const walls = [];
 const pits = [];
+const zombies = [];
+const cherries = [];
 const wallSpeed = 3;
 const wallWidth = 20;
 const wallHeight = 150;
@@ -42,7 +52,188 @@ let pitSpawnTimer = 0;
 let nextWallDistance = 0;
 let nextPitDistance = 0;
 let difficultyLevel = 1;
+let lastCherryLevel = 0;
 const groundY = 350;
+
+// Time system functions
+function updateTimeOfDay() {
+    const currentLevel = Math.floor(score / 100) + 1;
+    const timeIndex = Math.floor(currentLevel / 5) % 3;
+    
+    switch(timeIndex) {
+        case 0:
+            timeOfDay = 'day';
+            break;
+        case 1:
+            timeOfDay = 'evening';
+            break;
+        case 2:
+            timeOfDay = 'night';
+            break;
+    }
+}
+
+function getBackgroundGradient() {
+    switch(timeOfDay) {
+        case 'day':
+            return ['#87CEEB', '#98FB98']; // Blue to green
+        case 'evening':
+            return ['#FF8C00', '#FF6347']; // Orange to red
+        case 'night':
+            return ['#191970', '#000080']; // Dark blue to navy
+        default:
+            return ['#87CEEB', '#98FB98'];
+    }
+}
+
+// Cherry collectible class
+class Cherry {
+    constructor(x, y, isAerial = false) {
+        this.x = x;
+        this.y = y;
+        this.width = 20;
+        this.height = 20;
+        this.isAerial = isAerial;
+        this.animFrame = 0;
+        this.collected = false;
+    }
+    
+    update() {
+        this.x -= wallSpeed;
+        this.animFrame += 0.1;
+    }
+    
+    draw(ctx) {
+        if (this.collected) return;
+        
+        ctx.save();
+        
+        const bounce = Math.sin(this.animFrame) * 2;
+        
+        // Cherry body (red)
+        ctx.fillStyle = '#DC143C';
+        ctx.beginPath();
+        ctx.arc(this.x + 10, this.y + 10 + bounce, 8, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Cherry highlight
+        ctx.fillStyle = '#FF6B6B';
+        ctx.beginPath();
+        ctx.arc(this.x + 8, this.y + 8 + bounce, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Cherry stem
+        ctx.fillStyle = '#228B22';
+        ctx.fillRect(this.x + 9, this.y + 2 + bounce, 2, 6);
+        
+        // Cherry leaf
+        ctx.fillStyle = '#32CD32';
+        ctx.fillRect(this.x + 11, this.y + 3 + bounce, 4, 2);
+        
+        ctx.restore();
+    }
+    
+    checkCollisionWithPig(pig) {
+        return pig.x + pig.width > this.x && 
+               pig.x < this.x + this.width &&
+               pig.y + pig.height > this.y && 
+               pig.y < this.y + this.height;
+    }
+}
+
+// Zombie enemy class
+class Zombie {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.width = 60;
+        this.height = 80;
+        this.baseSpeed = timeOfDay === 'evening' ? 1 : 2; // Slow in evening, moderate at night
+        this.speed = this.baseSpeed;
+        this.health = 1;
+        this.walkFrame = 0;
+        this.armSwing = 0;
+        this.isDead = false;
+    }
+    
+    update() {
+        if (!this.isDead) {
+            // Move toward pig (pig is always to the left of zombie)
+            if (this.x > pig.x) {
+                this.x -= this.speed; // Move left toward pig
+            } else {
+                this.x += this.speed; // Move right toward pig
+            }
+            
+            // Also move slightly toward pig's vertical position
+            if (this.y > pig.y + 10) {
+                this.y -= 0.5;
+            } else if (this.y < pig.y - 10) {
+                this.y += 0.5;
+            }
+            
+            this.walkFrame += 0.15;
+            this.armSwing += 0.2;
+        }
+    }
+    
+    draw(ctx) {
+        if (this.isDead) return;
+        
+        ctx.save();
+        
+        const bounce = Math.sin(this.walkFrame) * 2;
+        const armSwingOffset = Math.sin(this.armSwing) * 15;
+        
+        // Body (pale green/gray)
+        ctx.fillStyle = '#8FBC8F';
+        ctx.fillRect(this.x, this.y + bounce, this.width, this.height);
+        
+        // Head
+        ctx.fillStyle = '#778878';
+        ctx.fillRect(this.x + 15, this.y - 20 + bounce, 30, 30);
+        
+        // Eyes (glowing red)
+        ctx.fillStyle = '#FF0000';
+        ctx.fillRect(this.x + 20, this.y - 15 + bounce, 6, 4);
+        ctx.fillRect(this.x + 30, this.y - 15 + bounce, 6, 4);
+        
+        // Mouth (dark)
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(this.x + 22, this.y - 5 + bounce, 12, 3);
+        
+        // Arms (outstretched)
+        ctx.fillStyle = '#696969';
+        // Left arm
+        ctx.fillRect(this.x - 20 + armSwingOffset, this.y + 20 + bounce, 25, 8);
+        // Right arm
+        ctx.fillRect(this.x + this.width - 5 - armSwingOffset, this.y + 20 + bounce, 25, 8);
+        
+        // Hands
+        ctx.fillStyle = '#556B55';
+        ctx.fillRect(this.x - 25 + armSwingOffset, this.y + 18 + bounce, 12, 12);
+        ctx.fillRect(this.x + this.width + 15 - armSwingOffset, this.y + 18 + bounce, 12, 12);
+        
+        // Legs
+        const legBounce = Math.sin(this.walkFrame * 2) * 3;
+        ctx.fillStyle = '#696969';
+        ctx.fillRect(this.x + 15, this.y + 80 + bounce + legBounce, 12, 25);
+        ctx.fillRect(this.x + 35, this.y + 80 + bounce - legBounce, 12, 25);
+        
+        // Torn clothes effect
+        ctx.fillStyle = '#4A4A4A';
+        ctx.fillRect(this.x + 10, this.y + 30 + bounce, this.width - 20, 20);
+        
+        ctx.restore();
+    }
+    
+    checkCollisionWithPig(pig) {
+        return pig.x + pig.width > this.x && 
+               pig.x < this.x + this.width &&
+               pig.y + pig.height > this.y && 
+               pig.y < this.y + this.height;
+    }
+}
 
 function drawPig() {
     ctx.save();
@@ -50,6 +241,11 @@ function drawPig() {
     if (gameState === 'gameOver') {
         drawPorkChop();
         return;
+    }
+    
+    // Flashing effect when invulnerable
+    if (pig.invulnerable && Math.floor(pig.invulnerabilityTimer / 10) % 2 === 0) {
+        ctx.globalAlpha = 0.5;
     }
     
     pig.walkFrame += pig.walkSpeed;
@@ -211,13 +407,56 @@ function spawnPit() {
     nextPitDistance = 80 + Math.random() * 120;
 }
 
+function spawnZombie() {
+    // Only spawn zombies during evening and night
+    if (timeOfDay === 'day') return;
+    
+    const zombieX = canvas.width + 50;
+    const zombieY = groundY - 80;
+    
+    zombies.push(new Zombie(zombieX, zombieY));
+}
+
+function spawnCherry() {
+    const currentLevel = Math.floor(score / 100) + 1;
+    
+    // Only spawn cherries every 1-2 levels
+    if (currentLevel - lastCherryLevel < 1 + Math.floor(Math.random() * 2)) {
+        return;
+    }
+    
+    lastCherryLevel = currentLevel;
+    
+    const cherryX = canvas.width + 50;
+    const isAerial = Math.random() < 0.4; // 40% chance to be aerial
+    
+    let cherryY;
+    if (isAerial) {
+        // Aerial cherries (require jumping)
+        cherryY = groundY - 120 - Math.random() * 50;
+    } else {
+        // Ground cherries
+        cherryY = groundY - 30;
+    }
+    
+    cherries.push(new Cherry(cherryX, cherryY, isAerial));
+}
+
 function drawGround() {
+    // Dynamic background based on time of day
+    const colors = getBackgroundGradient();
+    const gradient = ctx.createLinearGradient(0, 0, 0, groundY);
+    gradient.addColorStop(0, colors[0]);
+    gradient.addColorStop(1, colors[1]);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, groundY);
+    
     // Main ground
     ctx.fillStyle = '#8B4513';
     ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
     
     // Grass on top
-    ctx.fillStyle = '#228B22';
+    ctx.fillStyle = timeOfDay === 'night' ? '#1F4F1F' : '#228B22';
     ctx.fillRect(0, groundY - 10, canvas.width, 10);
     
     // Ground texture
@@ -261,6 +500,30 @@ function updatePits() {
     }
 }
 
+function updateZombies() {
+    for (let i = zombies.length - 1; i >= 0; i--) {
+        zombies[i].update();
+        
+        // Remove zombies that have moved off screen (either direction) or are too far away
+        if (zombies[i].x < -zombies[i].width || 
+            zombies[i].x > canvas.width + zombies[i].width ||
+            Math.abs(zombies[i].x - pig.x) > canvas.width) {
+            zombies.splice(i, 1);
+        }
+    }
+}
+
+function updateCherries() {
+    for (let i = cherries.length - 1; i >= 0; i--) {
+        cherries[i].update();
+        
+        // Remove cherries that have moved off screen
+        if (cherries[i].x < -cherries[i].width) {
+            cherries.splice(i, 1);
+        }
+    }
+}
+
 function updatePig() {
     // Handle jumping physics
     if (pig.isJumping) {
@@ -274,6 +537,14 @@ function updatePig() {
             pig.jumpVelocity = 0;
         }
     }
+    
+    // Handle invulnerability timer
+    if (pig.invulnerable) {
+        pig.invulnerabilityTimer--;
+        if (pig.invulnerabilityTimer <= 0) {
+            pig.invulnerable = false;
+        }
+    }
 }
 
 function jump() {
@@ -283,7 +554,44 @@ function jump() {
     }
 }
 
+function takeDamage() {
+    if (pig.invulnerable) return;
+    
+    pig.health--;
+    pig.invulnerable = true;
+    pig.invulnerabilityTimer = 120; // 2 seconds of invulnerability
+    
+    if (pig.health <= 0) {
+        gameState = 'gameOver';
+        finalScore = score;
+        
+        // Update high score if needed
+        if (finalScore > highScore) {
+            highScore = finalScore;
+            localStorage.setItem('pigPunchHighScore', highScore.toString());
+            newRecord = true;
+        }
+        
+        document.getElementById('gameOver').style.display = 'block';
+        document.getElementById('restartBtn').style.display = 'block';
+    }
+}
+
 function checkCollision() {
+    // Check cherry collisions first
+    for (let i = cherries.length - 1; i >= 0; i--) {
+        const cherry = cherries[i];
+        if (!cherry.collected && cherry.checkCollisionWithPig(pig)) {
+            cherry.collected = true;
+            cherries.splice(i, 1);
+            
+            // Restore health (up to max)
+            if (pig.health < pig.maxHealth) {
+                pig.health++;
+            }
+        }
+    }
+    
     // Check wall collisions
     for (let wall of walls) {
         if (!wall.broken && 
@@ -295,18 +603,21 @@ function checkCollision() {
             if (pig.isPunching) {
                 wall.broken = true;
             } else {
-                gameState = 'gameOver';
-                finalScore = score;
-                
-                // Update high score if needed
-                if (finalScore > highScore) {
-                    highScore = finalScore;
-                    localStorage.setItem('pigPunchHighScore', highScore.toString());
-                    newRecord = true;
-                }
-                
-                document.getElementById('gameOver').style.display = 'block';
-                document.getElementById('restartBtn').style.display = 'block';
+                takeDamage();
+                return;
+            }
+        }
+    }
+    
+    // Check zombie collisions
+    for (let i = zombies.length - 1; i >= 0; i--) {
+        const zombie = zombies[i];
+        if (!zombie.isDead && zombie.checkCollisionWithPig(pig)) {
+            if (pig.isPunching) {
+                zombie.isDead = true;
+                zombies.splice(i, 1);
+            } else {
+                takeDamage();
                 return;
             }
         }
@@ -319,18 +630,7 @@ function checkCollision() {
             pig.x < pit.x + pit.width &&
             pigFeetY >= pit.y) {
             
-            gameState = 'gameOver';
-            finalScore = score;
-            
-            // Update high score if needed
-            if (finalScore > highScore) {
-                highScore = finalScore;
-                localStorage.setItem('pigPunchHighScore', highScore.toString());
-                newRecord = true;
-            }
-            
-            document.getElementById('gameOver').style.display = 'block';
-            document.getElementById('restartBtn').style.display = 'block';
+            takeDamage();
             return;
         }
     }
@@ -353,6 +653,9 @@ function gameLoop() {
     // Update difficulty every 100 meters
     difficultyLevel = Math.floor(score / 100) + 1;
     
+    // Update time of day based on level (every 10 levels)
+    updateTimeOfDay();
+    
     // Spawn walls with random distances
     wallSpawnTimer++;
     if (wallSpawnTimer >= nextWallDistance) {
@@ -369,6 +672,19 @@ function gameLoop() {
         }
     }
     
+    // Spawn zombies during evening and night
+    if (timeOfDay !== 'day') {
+        const zombieSpawnRate = timeOfDay === 'evening' ? 600 : 300; // Much less frequent in evening, moderate at night
+        if (gameTime % zombieSpawnRate === 0) {
+            spawnZombie();
+        }
+    }
+    
+    // Spawn cherries randomly every few levels
+    if (gameTime % 60 === 0) { // Check every second
+        spawnCherry();
+    }
+    
     // Check for new high score during gameplay
     if (score > highScore && !newRecord) {
         newRecord = true;
@@ -381,6 +697,8 @@ function gameLoop() {
     
     updateWalls();
     updatePits();
+    updateZombies();
+    updateCherries();
     updatePig();
     
     drawGround();
@@ -393,6 +711,14 @@ function gameLoop() {
         if (!wall.broken) {
             drawWall(wall);
         }
+    }
+    
+    for (let zombie of zombies) {
+        zombie.draw(ctx);
+    }
+    
+    for (let cherry of cherries) {
+        cherry.draw(ctx);
     }
     
     if (pig.isPunching) {
@@ -417,20 +743,53 @@ function punch() {
 }
 
 function drawScore() {
+    // Health display (hearts)
+    for (let i = 0; i < pig.maxHealth; i++) {
+        const heartX = 20 + i * 35;
+        const heartY = 15;
+        
+        if (i < pig.health) {
+            // Full heart (red)
+            ctx.fillStyle = '#FF0000';
+        } else {
+            // Empty heart (gray)
+            ctx.fillStyle = '#666666';
+        }
+        
+        // Draw heart shape using rectangles to form a heart
+        ctx.fillRect(heartX, heartY + 5, 20, 15);
+        ctx.fillRect(heartX + 5, heartY, 10, 10);
+        ctx.fillRect(heartX + 2, heartY + 2, 6, 8);
+        ctx.fillRect(heartX + 12, heartY + 2, 6, 8);
+        
+        // Heart point at bottom
+        ctx.fillRect(heartX + 8, heartY + 18, 4, 4);
+        ctx.fillRect(heartX + 6, heartY + 16, 8, 4);
+    }
+    
     // Current score display
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = timeOfDay === 'night' ? '#FFF' : '#000';
     ctx.font = 'bold 24px Arial';
-    ctx.fillText('Distance: ' + score + 'm', 20, 40);
+    ctx.fillText('Distance: ' + score + 'm', 20, 60);
     
     // High score display
     ctx.fillStyle = '#4169E1';
     ctx.font = 'bold 20px Arial';
-    ctx.fillText('High Score: ' + highScore + 'm', 20, 70);
+    ctx.fillText('High Score: ' + highScore + 'm', 20, 90);
     
     // Difficulty level display
-    ctx.fillStyle = '#8B4513';
+    ctx.fillStyle = timeOfDay === 'night' ? '#CCC' : '#8B4513';
     ctx.font = 'bold 18px Arial';
-    ctx.fillText('Level: ' + difficultyLevel, 20, 95);
+    ctx.fillText('Level: ' + difficultyLevel, 20, 115);
+    
+    // Time of day display
+    ctx.fillStyle = timeOfDay === 'night' ? '#FFF' : '#000';
+    ctx.font = 'bold 18px Arial';
+    let timeText = timeOfDay.charAt(0).toUpperCase() + timeOfDay.slice(1);
+    if (timeOfDay === 'evening') timeText = '🌅 ' + timeText;
+    else if (timeOfDay === 'night') timeText = '🌙 ' + timeText;
+    else timeText = '☀️ ' + timeText;
+    ctx.fillText(timeText, 20, 140);
     
     // New record celebration
     if (celebrationTimer > 0) {
@@ -476,6 +835,8 @@ function restartGame() {
     gameState = 'playing';
     walls.length = 0;
     pits.length = 0;
+    zombies.length = 0;
+    cherries.length = 0;
     wallSpawnTimer = 0;
     pitSpawnTimer = 0;
     pig.isPunching = false;
@@ -484,6 +845,9 @@ function restartGame() {
     pig.y = pig.groundY;
     pig.isJumping = false;
     pig.jumpVelocity = 0;
+    pig.health = pig.maxHealth;
+    pig.invulnerable = false;
+    pig.invulnerabilityTimer = 0;
     keyPressed = false;
     spacePressed = false;
     gameTime = 0;
@@ -491,11 +855,13 @@ function restartGame() {
     score = 0;
     stepCounter = 0;
     finalScore = 0;
+    lastCherryLevel = 0;
     nextWallDistance = 150; // Start with easier spacing
     nextPitDistance = 120;
     difficultyLevel = 1;
     newRecord = false;
     celebrationTimer = 0;
+    timeOfDay = 'day'; // Reset to day time
     
     document.getElementById('gameOver').style.display = 'none';
     document.getElementById('restartBtn').style.display = 'none';
