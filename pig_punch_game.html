@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pig Punch Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #87CEEB, #98FB98);
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #gameContainer {
+            text-align: center;
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        canvas {
+            border: 3px solid #8B4513;
+            border-radius: 10px;
+            background: linear-gradient(to bottom, #87CEEB 0%, #98FB98 100%);
+            cursor: pointer;
+        }
+        #gameOver {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #FF6B6B;
+        }
+        #restartBtn {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #restartBtn:hover {
+            background: #45a049;
+        }
+        #instructions {
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="instructions">Press 'A' key to make the pig punch and break walls!</div>
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="gameOver" style="display: none;">
+            GAME OVER!<br>
+            The pig became pork chop! 🥩
+        </div>
+        <button id="restartBtn" style="display: none;" onclick="restartGame()">Restart Game</button>
+    </div>
+
+    <script src="pig_punch_game.js"></script>
+</body>
+</html>
