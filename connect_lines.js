@@ -190,11 +190,14 @@ class YarnConnectGame {
     }
     
     updateElasticPath(mouseX, mouseY) {
+        // First, check if we should remove any existing waypoints due to angle reversal
+        this.checkAndRemoveReversedWaypoints(mouseX, mouseY);
+        
         // Start building the path from the start shape
         let currentPath = [{ x: this.startShape.x, y: this.startShape.y }];
         
-        // Add all established waypoints
-        currentPath = currentPath.concat(this.establishedWaypoints);
+        // Add all remaining established waypoints
+        currentPath = currentPath.concat(this.establishedWaypoints.map(wp => ({ x: wp.x, y: wp.y })));
         
         // Determine the last point we're drawing from
         const lastPoint = currentPath[currentPath.length - 1];
@@ -231,7 +234,18 @@ class YarnConnectGame {
                 
                 if (distance < closestDistance) {
                     closestDistance = distance;
-                    newWaypoint = { x: shape.x, y: shape.y };
+                    // Calculate the bending direction when establishing this waypoint
+                    const entryVectorX = shape.x - lastPoint.x;
+                    const entryVectorY = shape.y - lastPoint.y;
+                    const exitVectorX = mouseX - shape.x;
+                    const exitVectorY = mouseY - shape.y;
+                    const bendDirection = this.crossProduct2D(entryVectorX, entryVectorY, exitVectorX, exitVectorY);
+                    
+                    newWaypoint = { 
+                        x: shape.x, 
+                        y: shape.y,
+                        bendDirection: bendDirection // Positive = counterclockwise, Negative = clockwise
+                    };
                 }
             }
         }
@@ -239,7 +253,7 @@ class YarnConnectGame {
         // If we found a new waypoint, add it to established waypoints
         if (newWaypoint) {
             this.establishedWaypoints.push(newWaypoint);
-            currentPath.push(newWaypoint);
+            currentPath.push({ x: newWaypoint.x, y: newWaypoint.y });
         }
         
         // Always add the current mouse position as the final point
@@ -252,6 +266,46 @@ class YarnConnectGame {
             temporary: true,
             isElastic: true
         };
+    }
+    
+    checkAndRemoveReversedWaypoints(mouseX, mouseY) {
+        // Check each waypoint from the end backwards to see if we should remove it
+        for (let i = this.establishedWaypoints.length - 1; i >= 0; i--) {
+            const waypoint = this.establishedWaypoints[i];
+            
+            // Get the point before this waypoint
+            const prevPoint = i === 0 ? 
+                { x: this.startShape.x, y: this.startShape.y } : 
+                this.establishedWaypoints[i - 1];
+            
+            // Calculate the current bending direction
+            const entryVectorX = waypoint.x - prevPoint.x;
+            const entryVectorY = waypoint.y - prevPoint.y;
+            const currentExitVectorX = mouseX - waypoint.x;
+            const currentExitVectorY = mouseY - waypoint.y;
+            const currentBendDirection = this.crossProduct2D(entryVectorX, entryVectorY, currentExitVectorX, currentExitVectorY);
+            
+            // Check if the bending direction has reversed
+            const originalBendDirection = waypoint.bendDirection;
+            
+            // Use a threshold to avoid flickering near zero
+            const threshold = 100; // Adjust this value as needed
+            
+            // If the current bending direction is opposite to the original (and significant)
+            if ((originalBendDirection > threshold && currentBendDirection < -threshold) ||
+                (originalBendDirection < -threshold && currentBendDirection > threshold)) {
+                
+                console.log(`Removing waypoint ${i} - bending direction reversed from ${originalBendDirection} to ${currentBendDirection}`);
+                // Remove this waypoint and all subsequent ones
+                this.establishedWaypoints.splice(i);
+                break;
+            }
+        }
+    }
+    
+    
+    crossProduct2D(ax, ay, bx, by) {
+        return ax * by - ay * bx;
     }
     
     simpleLineIntersectsShape(line, shape) {
