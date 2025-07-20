@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yarn Connect Game</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .shapes-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+        }
+
+        .shape {
+            position: absolute;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+            z-index: 3;
+            display: block;
+        }
+
+        .shape:hover {
+            transform: scale(1.1);
+        }
+
+        .shape.triangle {
+            width: 0;
+            height: 0;
+            border-left: 25px solid transparent;
+            border-right: 25px solid transparent;
+            border-bottom: 43px solid;
+        }
+
+        .shape.square {
+            width: 40px;
+            height: 40px;
+        }
+
+        .shape.circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+        }
+
+        .shape.diamond {
+            width: 35px;
+            height: 35px;
+            transform: rotate(45deg);
+        }
+
+        .shape.connected {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 10;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .level-info {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .restart-btn, .next-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+
+        .restart-btn:hover, .next-btn:hover {
+            background: #45a049;
+        }
+
+        .win-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+            display: none;
+        }
+
+        .win-message h2 {
+            color: #4CAF50;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .shape.triangle {
+                border-left: 30px solid transparent;
+                border-right: 30px solid transparent;
+                border-bottom: 52px solid;
+            }
+            
+            .shape.square, .shape.circle {
+                width: 50px;
+                height: 50px;
+            }
+            
+            .shape.diamond {
+                width: 45px;
+                height: 45px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas class="game-canvas" id="gameCanvas"></canvas>
+        <div class="shapes-container" id="shapesContainer"></div>
+        
+        <div class="ui-panel">
+            <div class="level-info" id="levelInfo">Level 1</div>
+            <button class="restart-btn" onclick="game.restartLevel()">Shuffle</button>
+            <button class="next-btn" onclick="game.nextLevel()" id="nextBtn" style="display: none;">Next Level</button>
+        </div>
+
+        <div class="win-message" id="winMessage">
+            <h2>Congratulations!</h2>
+            <p>You successfully connected all shapes!</p>
+            <button class="next-btn" onclick="game.nextLevel()">Next Level</button>
+        </div>
+    </div>
+
+    <script src="connect_lines.js"></script>
+</body>
+</html>
